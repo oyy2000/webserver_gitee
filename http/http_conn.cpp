@@ -19,7 +19,8 @@ int set_non_blocking(int fd) {
 void addfd(int epollfd, int fd, bool one_shot) {
     epoll_event event;
     event.data.fd = fd;
-    event.events = EPOLLIN | EPOLLRDHUP; // 对端断开的事件
+//    event.events = EPOLLIN | EPOLLRDHUP; // 对端断开的事件
+    event.events = EPOLLIN | EPOLLET |EPOLLRDHUP; // 对端断开的事件
 
     if (one_shot) {
         event.events |= EPOLLONESHOT;
@@ -65,7 +66,30 @@ void http_conn::close_conn() {
 
 // 非阻塞地读
 bool http_conn::read() {
-    printf("一次性读\n");
+    // 循环地读数据直到无数据可读，或者对方关闭连接
+    if(m_read_idx >= READ_BUFFER_SIZE) {
+        return false;
+    }
+
+    // 读取到的字节
+    int bytes_read = 0;
+    while(true) {
+        bytes_read = recv(m_sockfd, m_read_buf + m_read_idx, READ_BUFFER_SIZE - m_read_idx, 0);
+        if(bytes_read == -1) {
+            if( (errno == EAGAIN) || (errno == EWOULDBLOCK) ) {
+                break;
+            }
+            // 发生错误
+            return false;
+        } else if(bytes_read == 0) {
+            return false; // 对方断开连接
+        } else {
+            m_read_idx += bytes_read;
+        }
+    }
+
+    printf("读到了数据：%s\n", m_read_buf);
+    return true;
 }
 
 // 非阻塞地写
