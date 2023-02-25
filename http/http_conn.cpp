@@ -101,6 +101,6 @@ bool http_conn::write() {
 // 由线程池中工作线程调用，是处理HTTP请求的入口
 void http_conn::process() {
     // 解析HTTP
-    printf("parse the HTTP request, create the response");
+    printf("parse the HTTP request, create the response\n");
     // 生成响应
 }
