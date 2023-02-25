@@ -8,7 +8,13 @@
 > * 线程池
 
 
-
+Debug 日志
+```c
+if (pthread_create(m_threads + i, NULL, worker, this) != 0) { // 这里要传参数this
+            delete[] m_threads;
+            throw std::exception();
+        }
+```
 
 
 

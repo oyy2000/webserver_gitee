@@ -7,13 +7,20 @@
 
 #include <pthread.h>
 #include <list>
+#include <cstdio>
+#include <exception>
+
 #include "../lock/locker.h"
 // 线程池类，定义成模板类为了代码复用，模板参数T为任务类
 template <typename T>
-class threadpool
-{
+class threadpool {
 private:
-    static void* worker(void* arg); // can not visit the non-static members
+    /*工作线程运行的函数，它不断从工作队列中取出任务并执行之*/
+    // worker needs to be a static variable. if it is a member function
+    // this pointer will be passed to the worker.
+    static void *worker(void *arg); // can not visit the non-static members
+    void run();
+
 private:
     // 线程的数量
     int m_thread_number;
@@ -29,37 +36,37 @@ private:
     sem m_queuestat;
     // if exit the thread
     bool m_stop;
+
 public:
-    threadpool(int thread_number = 8, int max_requests = 1000);
+    threadpool(int thread_number = 8, int max_requests = 10000);
     ~threadpool();
-    bool append(T* request);
-    void run();
+    bool append(T *request);
 };
 
 template <typename T>
-threadpool<T>::threadpool(int thread_number, int max_requests):
+threadpool<T>::threadpool(int thread_number, int max_requests) :
     m_thread_number(thread_number), m_max_requests(max_requests),
     m_stop(false), m_threads(NULL) {
-    if(thread_number <= 0 || max_requests <= 0) {
+    if ((thread_number <= 0) || (max_requests <= 0)) {
         throw std::exception();
     }
     // 创建threadpool数组
     m_threads = new pthread_t[m_thread_number];
-    if(!m_threads) {
+    if (!m_threads) {
         throw std::exception();
     }
 
     // create m_thread_number threads, set them detached
-    for(int i = 0; i < m_thread_number; ++i) {
+    for (int i = 0; i < thread_number; ++i) {
         printf("create the %dth thread\n", i);
         // worker needs to be a static variable. if it is a member function
         // this pointer will be passed to the worker.
-        if(pthread_create(m_threads + i, NULL, worker, NULL) != 0) {
+        if (pthread_create(m_threads + i, NULL, worker, this) != 0) { // pass the parameter this
             delete[] m_threads;
             throw std::exception();
         }
 
-        if(pthread_detach(m_threads[i]) != 0) {
+        if (pthread_detach(m_threads[i]) != 0) {
             delete[] m_threads;
             throw std::exception();
         }
@@ -76,7 +83,7 @@ template <typename T>
 bool threadpool<T>::append(T *request) {
     m_queuelocker.lock();
     // if the work queue is bigger than the max number, it should not append
-    if(m_workqueue.size() >= m_max_requests) {
+    if (m_workqueue.size() >= m_max_requests) {
         m_queuelocker.unlock();
         return false;
     }
@@ -88,32 +95,33 @@ bool threadpool<T>::append(T *request) {
     return true;
 }
 
-template<typename T>
+template <typename T>
 void *threadpool<T>::worker(void *arg) {
     // pass the parameter this into this function
-    threadpool* pool = (threadpool*) arg;
+    threadpool *pool = (threadpool *)arg;
     // 从工作队列中取数据
     pool->run();
     return pool;
 }
 
-template<typename T>
+template <typename T>
 void threadpool<T>::run() {
     // stop until m_stop is not equal to false
-    while(!m_stop) {
-        m_queuestat.wait(); // wait for the increment of semaphore
+    while (!m_stop) {
+        m_queuestat.wait();   // wait for the increment of semaphore
         m_queuelocker.lock(); // lock to operate
-        if(m_workqueue.empty()) {
+        if (m_workqueue.empty()) {
             m_queuelocker.unlock();
             continue;
         }
         // it will be an object
-        T* request = m_workqueue.front();
+        T *request = m_workqueue.front();
         m_workqueue.pop_front();
         m_queuelocker.unlock();
-
+        if (!request) {
+            continue;
+        }
         request->process();
-
     }
 }
 #endif // THREADPOOL_H

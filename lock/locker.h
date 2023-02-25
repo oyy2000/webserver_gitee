@@ -9,7 +9,6 @@
 #include<pthread.h>
 #include<exception>
 #include<semaphore.h>
-
 class locker {
 private:
     pthread_mutex_t m_mutex;
